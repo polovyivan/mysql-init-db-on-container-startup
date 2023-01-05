@@ -1,15 +1,31 @@
 #!/bin/bash
-echo "########### Creating env variables ###########"
-ROWS=20
-NUMBER_OF_CUSTOMERS=$(( ${ROWS} / 3 + 1))
-PAYMENT_TYPES=("VISA" "MASTERCARD" "DISCOVER" "AMEX" "JCB" "CASH")
-SQL_SCRIPT_PATH=/tmp/sql/01-init-sql-script.sql
-CUSTOMER_IDS=()
 
-echo "########### Creating customer_id array ###########"
-for i in $(seq ${NUMBER_OF_CUSTOMERS}); do
-  CUSTOMER_IDS+=($(cat /proc/sys/kernel/random/uuid))
-done
+echo "########### Creating env variables ###########"
+PAYMENT_TYPES=("VISA" "MASTERCARD" "DISCOVER" "AMEX" "CASH")
+ROWS=100
+NUMBER_OF_CUSTOMERS=$((${ROWS} / 3))
+echo "########### Numbers of customers is ${NUMBER_OF_CUSTOMERS} ###########"
+#SQL_SCRIPT_PATH=./01-init-sql-script.sql
+SQL_SCRIPT_PATH=/tmp/sql/01-init-sql-script.sql
+
+function getUUID() {
+  UUID=($(cat /proc/sys/kernel/random/uuid))
+}
+
+function getDate() {
+  DATE=$(date -d "$((${RANDOM_NUMBER} % 22 + 2000))-
+                  $((${RANDOM_NUMBER} % 12 + 1))-
+                  $((${RANDOM_NUMBER} % 28 + 1))
+                  $((${RANDOM_NUMBER} % 23 + 1)):00:00" '+%Y-%m-%d %H:%M:%S')
+}
+
+function getPaymentType() {
+  PAYMENT_TYPE=${PAYMENT_TYPES[${RANDOM_NUMBER} % ${#PAYMENT_TYPES[@]}]}
+}
+
+function getAmount() {
+  AMOUNT=$((1 + ${RANDOM_NUMBER} % (200 - 1))).$((${RANDOM_NUMBER} % 99))
+}
 
 echo "########### Creating sql script file ###########"
 echo "
@@ -24,20 +40,40 @@ created_at DATETIME NOT NULL
 );
 " >${SQL_SCRIPT_PATH}
 
-if [ "${ROWS}" -gt 0 ]; then echo "INSERT INTO purchase_transaction VALUES" >> ${SQL_SCRIPT_PATH}; fi
+if [ "${ROWS}" -gt 0 ]; then
+  echo "########### Generating insert statement for ${ROWS} rows ###########"
+  echo "INSERT INTO purchase_transaction VALUES" >>${SQL_SCRIPT_PATH}
+fi
 
-echo "########### Generating insert statement for ${ROWS} rows ###########"
-for i in $(seq ${ROWS}); do
-  TRANSACTION_ID=$(cat /proc/sys/kernel/random/uuid)
-  CUSTOMER_ID=${CUSTOMER_IDS[${RANDOM} % ${#CUSTOMER_IDS[@]}]}
-  PAYMENT_TYPE=${PAYMENT_TYPES[${RANDOM} % ${#PAYMENT_TYPES[@]}]}
-  AMOUNT=$((1+${RANDOM}%(200-1))).$((${RANDOM} % 99))
-  DATE=$(date -d "$((${RANDOM} % 22 + 2000))-$((${RANDOM} % 12 + 1))-$((${RANDOM} % 28 + 1)) $((${RANDOM} % 23 + 1)):$((${RANDOM} % 59 + 1)):$((${RANDOM} % 59 + 1))" '+%Y-%m-%d %H:%M:%S')
-  if [ ${i} -eq ${ROWS} ]; then LAST_CHAR=";"; else LAST_CHAR=","; fi
-  echo "(\"${TRANSACTION_ID}\",\"${PAYMENT_TYPE}\", \"${AMOUNT}\", \"${CUSTOMER_ID}\", \"${DATE}\")${LAST_CHAR}" >> ${SQL_SCRIPT_PATH}
+for ((i = 1; i <= ${NUMBER_OF_CUSTOMERS}; ++i)); do
+  RANDOM_NUMBER=$((RANDOM))
+
+  if [ ${i} == ${NUMBER_OF_CUSTOMERS} ]; then
+    NUMBER_OF_TRANSACTIONS_FOR_CUSTOMER=${ROWS}
+  else
+    NUMBER_OF_TRANSACTIONS_FOR_CUSTOMER=$((${RANDOM_NUMBER} % 3 + 2))
+    ROWS=$((ROWS - NUMBER_OF_TRANSACTIONS_FOR_CUSTOMER))
+  fi
+
+  getUUID
+
+  for ((j = 1; j <= ${NUMBER_OF_TRANSACTIONS_FOR_CUSTOMER}; ++j)); do
+    RANDOM_NUMBER=$((RANDOM))
+    getPaymentType
+    getAmount
+    getDate
+    if [ ${i} == ${NUMBER_OF_CUSTOMERS} ] && [ ${j} == ${NUMBER_OF_TRANSACTIONS_FOR_CUSTOMER} ]; then
+      LAST_CHAR=";"
+    else
+      LAST_CHAR=","
+    fi
+    echo "(uuid(),\"${PAYMENT_TYPE}\", \"${AMOUNT}\", \"${UUID}\", \"${DATE}\")${LAST_CHAR}" >>${SQL_SCRIPT_PATH}
+  done
 done
 
+echo -e ${SCRIPT_CONTENT} >>${SQL_SCRIPT_PATH}
+
 echo "########### Running SQL script against DB ###########"
-mysql --user="customer_user" --password="customer_password" --database="customer" < ${SQL_SCRIPT_PATH}
+mysql --user="customer_user" --password="customer_password" --database="customer" <${SQL_SCRIPT_PATH}
 
 echo "########### Script execution finished! ###########"

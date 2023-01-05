@@ -11,6 +11,7 @@ services:
       MYSQL_DATABASE: customer
       MYSQL_USER: customer_user
       MYSQL_PASSWORD: customer_password
+      MAX_ALLOWED_PACKET: 1073741824
     volumes:
       - ./init/mysql/scripts/sql:/tmp/sql
       - ./init/mysql/scripts/bash:/docker-entrypoint-initdb.d
