@@ -2,10 +2,10 @@
 
 echo "########### Creating env variables ###########"
 PAYMENT_TYPES=("VISA" "MASTERCARD" "DISCOVER" "AMEX" "CASH")
-ROWS=100
+ROWS=100000
 NUMBER_OF_CUSTOMERS=$((${ROWS} / 3))
 echo "########### Numbers of customers is ${NUMBER_OF_CUSTOMERS} ###########"
-#SQL_SCRIPT_PATH=./01-init-sql-script.sql
+
 SQL_SCRIPT_PATH=/tmp/sql/01-init-sql-script.sql
 
 function getUUID() {
@@ -45,24 +45,23 @@ if [ "${ROWS}" -gt 0 ]; then
   echo "INSERT INTO purchase_transaction VALUES" >>${SQL_SCRIPT_PATH}
 fi
 
-for ((i = 1; i <= ${NUMBER_OF_CUSTOMERS}; ++i)); do
+for ((i = ${NUMBER_OF_CUSTOMERS}; i >= 0; i--)); do
   RANDOM_NUMBER=$((RANDOM))
 
-  if [ ${i} == ${NUMBER_OF_CUSTOMERS} ]; then
+  if [ ${i} == 0 ]; then
     NUMBER_OF_TRANSACTIONS_FOR_CUSTOMER=${ROWS}
   else
-    NUMBER_OF_TRANSACTIONS_FOR_CUSTOMER=$((${RANDOM_NUMBER} % 3 + 2))
+    MAX_NUMBER_OF_TRANSACTION_PER_CUSTOMER=$((${ROWS} / ${i}))
+    NUMBER_OF_TRANSACTIONS_FOR_CUSTOMER=$((${RANDOM_NUMBER} % ${MAX_NUMBER_OF_TRANSACTION_PER_CUSTOMER} + 2))
     ROWS=$((ROWS - NUMBER_OF_TRANSACTIONS_FOR_CUSTOMER))
   fi
-
   getUUID
-
-  for ((j = 1; j <= ${NUMBER_OF_TRANSACTIONS_FOR_CUSTOMER}; ++j)); do
+  for ((j = 1; j <= ${NUMBER_OF_TRANSACTIONS_FOR_CUSTOMER}; j++)); do
     RANDOM_NUMBER=$((RANDOM))
     getPaymentType
     getAmount
     getDate
-    if [ ${i} == ${NUMBER_OF_CUSTOMERS} ] && [ ${j} == ${NUMBER_OF_TRANSACTIONS_FOR_CUSTOMER} ]; then
+    if [ ${i} == 0 ] && [ ${j} == ${NUMBER_OF_TRANSACTIONS_FOR_CUSTOMER} ]; then
       LAST_CHAR=";"
     else
       LAST_CHAR=","
@@ -70,8 +69,6 @@ for ((i = 1; i <= ${NUMBER_OF_CUSTOMERS}; ++i)); do
     echo "(uuid(),\"${PAYMENT_TYPE}\", \"${AMOUNT}\", \"${UUID}\", \"${DATE}\")${LAST_CHAR}" >>${SQL_SCRIPT_PATH}
   done
 done
-
-echo -e ${SCRIPT_CONTENT} >>${SQL_SCRIPT_PATH}
 
 echo "########### Running SQL script against DB ###########"
 mysql --user="customer_user" --password="customer_password" --database="customer" <${SQL_SCRIPT_PATH}
